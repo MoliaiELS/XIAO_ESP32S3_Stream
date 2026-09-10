@@ -7,6 +7,11 @@ build/
 *.map
 *.uf2
 
+# Laptop client output
+recordings/
+__pycache__/
+*.pyc
+
 # Editors and OS files
 .vscode/
 .idea/

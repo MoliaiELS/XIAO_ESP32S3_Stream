@@ -8,9 +8,10 @@
 - 通过 TCP 端口 `9000` 双向传输带帧头和 CRC32 校验的数据。
 - 定期发送设备运行时间、剩余内存、Wi-Fi 信号和传感器状态。
 - 接收 UTF-8 JSON 命令，输出到串口并返回确认帧。
-- 已定义 IMU、TOF 和 PCM16 麦克风数据格式及驱动接口。
+- 使用板载 BOOT 键触发 16 kHz、16-bit、单声道 PCM 语音上传，并通过静音检测自动结束。
+- 已定义 IMU、TOF 数据格式及驱动接口。
 
-IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入具体硬件后再填写对应采集代码。下行命令目前只确认收到，不执行具体动作。
+IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件后再填写对应采集代码。麦克风已经可以发送真实 PCM 数据。下行命令目前只确认收到，不执行具体动作。
 
 ## 程序层级
 
@@ -44,10 +45,10 @@ IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入�
 | `TransportProtocol.h/.cpp` | 定义二进制帧、消息类型、传感器载荷及 CRC32 算法。 |
 | `TransportService.h/.cpp` | TCP 服务端；处理连接、拆包、校验、收发序号和完整写入。只允许一个 laptop 客户端。 |
 | `CommandHandler.h/.cpp` | 处理 `Command` 帧；当前打印 JSON，并返回 `CommandAck`。后续命令逻辑从这里扩展。 |
-| `SensorManager.h/.cpp` | 统一轮询传感器并发送数据；当前会发送真实设备状态，不发送虚假传感器值。 |
+| `SensorManager.h/.cpp` | 轮询传感器，处理 BOOT 键消抖、录音状态、VAD 和音频分块发送。 |
 | `ImuSensor.h/.cpp` | IMU 驱动占位；输出加速度、角速度、四元数和温度。 |
 | `TofSensor.h/.cpp` | TOF 驱动占位；输出距离、信号强度、环境强度和测距状态。 |
-| `MicrophoneSensor.h/.cpp` | PDM 麦克风占位；预留 GPIO 41/42、16 kHz 单声道 PCM16 接口。 |
+| `MicrophoneSensor.h/.cpp` | 使用 `ESP_I2S` 驱动 GPIO 41/42 的 PDM 麦克风，读取单声道 PCM16。 |
 | `PROTOCOL.md` | TCP 二进制协议的完整字段、字节序和载荷说明。 |
 | `laptop_client.py` | 无第三方依赖的参考客户端；接收数据帧并可发送一次 JSON 命令。 |
 | `.gitignore` | 忽略 Arduino 构建产物和编辑器临时文件。 |
@@ -101,6 +102,10 @@ laptop 接收状态和传感器帧：
 python .\laptop_client.py 设备IP
 ```
 
+客户端连接后，正常运行时短按板载 BOOT 键开始录音。再次短按、连续静音约 1 秒、3 秒内没有检测到语音或录音达到 15 秒，都会结束本次录音。收到的 PCM 会保存在 laptop 当前目录的 `recordings/voice-*.wav`。
+
+BOOT 键连接 GPIO0。GPIO0 是启动配置引脚，因此不要在复位或上电时按住它；系统正常运行后可以短按。更换外接大按键时，修改 `Config.h` 中的 `VOICE_BUTTON_PIN`，按键另一端接 GND，并保持低电平有效。
+
 发送一条测试命令并继续接收数据：
 
 ```powershell
@@ -122,7 +127,7 @@ TCP 帧头固定为 28 字节、小端序，详细格式见 [PROTOCOL.md](PROTOC
 
 - 接入具体 IMU：实现 `ImuSensor::begin()` 和 `ImuSensor::read()`。
 - 接入具体 TOF：实现 `TofSensor::begin()` 和 `TofSensor::read()`。
-- 启用板载麦克风：在 `MicrophoneSensor.cpp` 中使用 Arduino ESP32 3.x 的 `ESP_I2S.h`，再由 `SensorManager` 组装 `AudioPcmPrefix + PCM16` 数据。
+- 调整语音触发：修改 `Config.h` 中的按钮 GPIO、VAD RMS 阈值、静音时间和最长录音时间。
 - 增加命令：在 `CommandHandler::handle()` 中解析 `name` 和 `args` 并分发；语音等大数据应使用分片标志发送。
 - 调整画质或功耗：修改 `Config.h` 中的分辨率、JPEG 质量、帧缓冲数量和 `WIFI_MAX_THROUGHPUT`。
 

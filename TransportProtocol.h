@@ -4,7 +4,7 @@
 
 namespace WireProtocol {
 constexpr uint32_t MAGIC = 0x4F414958;  // bytes on wire: "XIAO"
-constexpr uint8_t VERSION = 1;
+constexpr uint8_t VERSION = 2;
 constexpr size_t MAX_RX_PAYLOAD = 1024;
 
 enum class MessageType : uint8_t {
@@ -20,6 +20,8 @@ enum FrameFlags : uint16_t {
   FLAG_NONE = 0,
   FLAG_MORE_FRAGMENTS = 1 << 0,
   FLAG_ERROR = 1 << 1,
+  FLAG_STREAM_START = 1 << 2,
+  FLAG_STREAM_END = 1 << 3,
 };
 
 #pragma pack(push, 1)
@@ -51,6 +53,8 @@ struct TofPayload {
 
 // Immediately followed by sampleCount * channels signed little-endian samples.
 struct AudioPcmPrefix {
+  uint32_t streamId;
+  uint32_t chunkIndex;
   uint32_t sampleRateHz;
   uint16_t sampleCount;
   uint8_t channels;
@@ -67,6 +71,7 @@ struct StatusPayload {
 #pragma pack(pop)
 
 static_assert(sizeof(FrameHeader) == 28, "Unexpected protocol header layout");
+static_assert(sizeof(AudioPcmPrefix) == 16, "Unexpected audio prefix layout");
 
 uint32_t crc32(const uint8_t *data, size_t length);
 }  // namespace WireProtocol
