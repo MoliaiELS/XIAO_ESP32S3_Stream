@@ -5,6 +5,10 @@
 
 namespace AppConfig
 {
+    // Keep the full Wi-Fi/video/data application running while also allowing
+    // button-triggered recordings to be saved locally.
+    constexpr bool ENABLE_SD_AUDIO_RECORDING = true;
+
     // Wi-Fi credentials. This file is tracked by Git; do not commit real passwords
     // if the repository may be shared or published.
     constexpr char WIFI_SSID[] = "moliai";
@@ -30,12 +34,24 @@ namespace AppConfig
     constexpr bool VOICE_BUTTON_ACTIVE_LOW = true;
     constexpr uint32_t BUTTON_DEBOUNCE_MS = 35;
 
+    // Arduino's XIAO ESP32S3 variant maps LED_BUILTIN to the active-low
+    // orange USER_LED on GPIO21.
+    constexpr uint8_t RECORDING_LED_PIN = LED_BUILTIN;
+    constexpr bool RECORDING_LED_ACTIVE_LOW = true;
+
     constexpr uint32_t AUDIO_SAMPLE_RATE_HZ = 16000;
     constexpr uint16_t AUDIO_CHUNK_MS = 20;
-    constexpr uint16_t AUDIO_VAD_RMS_THRESHOLD = 700;
-    constexpr uint32_t AUDIO_WAIT_FOR_SPEECH_MS = 3000;
-    constexpr uint32_t AUDIO_SILENCE_TIMEOUT_MS = 1000;
-    constexpr uint32_t AUDIO_MAX_RECORDING_MS = 15000;
+    // Audio is buffered in PSRAM, then written after recording stops.
+    constexpr uint32_t AUDIO_SD_MAX_RECORDING_MS = 20UL * 1000UL;
+
+    // Verified Sense SD bus. Current pin tables use CS=GPIO3; older examples
+    // use GPIO21, so initialization probes both at 4 MHz then 1 MHz.
+    constexpr uint8_t SD_SCK_PIN = 7;
+    constexpr uint8_t SD_MISO_PIN = 8;
+    constexpr uint8_t SD_MOSI_PIN = 9;
+    constexpr uint8_t SD_CS_PIN = 3;
+    constexpr uint8_t SD_FALLBACK_CS_PIN = 21;
+    constexpr uint32_t SD_SPI_FREQUENCY_HZ = 4000000;
 
     constexpr uint32_t STATUS_INTERVAL_MS = 5000;
 } // namespace AppConfig

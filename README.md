@@ -8,10 +8,10 @@
 - 通过 TCP 端口 `9000` 双向传输带帧头和 CRC32 校验的数据。
 - 定期发送设备运行时间、剩余内存、Wi-Fi 信号和传感器状态。
 - 接收 UTF-8 JSON 命令，输出到串口并返回确认帧。
-- 使用板载 BOOT 键触发 16 kHz、16-bit、单声道 PCM 语音上传，并通过静音检测自动结束。
+- 使用板载 BOOT 键触发 16 kHz、16-bit、单声道录音，并保存为 microSD 上的 WAV 文件；录音不依赖 Wi-Fi 或 laptop 连接。
 - 已定义 IMU、TOF 数据格式及驱动接口。
 
-IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件后再填写对应采集代码。麦克风已经可以发送真实 PCM 数据。下行命令目前只确认收到，不执行具体动作。
+IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件后再填写对应采集代码。麦克风已能录制真实 PCM 并保存 WAV；音频上行协议保留但当前不发送。下行命令目前只确认收到，不执行具体动作。
 
 ## 程序层级
 
@@ -45,7 +45,7 @@ IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件�
 | `TransportProtocol.h/.cpp` | 定义二进制帧、消息类型、传感器载荷及 CRC32 算法。 |
 | `TransportService.h/.cpp` | TCP 服务端；处理连接、拆包、校验、收发序号和完整写入。只允许一个 laptop 客户端。 |
 | `CommandHandler.h/.cpp` | 处理 `Command` 帧；当前打印 JSON，并返回 `CommandAck`。后续命令逻辑从这里扩展。 |
-| `SensorManager.h/.cpp` | 轮询传感器，处理 BOOT 键消抖、录音状态、VAD 和音频分块发送。 |
+| `SensorManager.h/.cpp` | 轮询传感器，处理 BOOT 键、录音 LED、PSRAM 音频缓存、SD 探测及 WAV 保存。 |
 | `ImuSensor.h/.cpp` | IMU 驱动占位；输出加速度、角速度、四元数和温度。 |
 | `TofSensor.h/.cpp` | TOF 驱动占位；输出距离、信号强度、环境强度和测距状态。 |
 | `MicrophoneSensor.h/.cpp` | 使用 `ESP_I2S` 驱动 GPIO 41/42 的 PDM 麦克风，读取单声道 PCM16。 |
@@ -59,7 +59,7 @@ IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件�
 2. 在库管理器中安装 `OV5640 Auto Focus for ESP32 Camera`（版本 0.1.1）。
 3. 选择开发板 `XIAO_ESP32S3`。
 4. 将 PSRAM 设置为 `OPI PSRAM`，建议使用至少 3 MB APP 空间的分区。
-5. 安装 Sense 扩展板、摄像头和包装内的 Wi-Fi 天线。
+5. 安装 Sense 扩展板、摄像头和包装内的 Wi-Fi 天线；SD 录音需插入不大于 32 GB、FAT32 格式的 microSD 卡。
 6. 按下一节配置 Wi-Fi。
 7. 编译并上传 `XIAO_ESP32S3_Stream.ino`，以 `115200` 波特率打开串口监视器。
 
@@ -102,9 +102,17 @@ laptop 接收状态和传感器帧：
 python .\laptop_client.py 设备IP
 ```
 
-客户端连接后，正常运行时短按板载 BOOT 键开始录音。再次短按、连续静音约 1 秒、3 秒内没有检测到语音或录音达到 15 秒，都会结束本次录音。收到的 PCM 会保存在 laptop 当前目录的 `recordings/voice-*.wav`。
+短按板载 BOOT 键即可开始本地录音，不需要等待 Wi-Fi 或客户端连接；USER_LED 在录音期间点亮。再次短按或达到 20 秒上限后停止，LED 熄灭，文件依次保存为 `/recording_0001.wav`、`/recording_0002.wav` 等。
 
 BOOT 键连接 GPIO0。GPIO0 是启动配置引脚，因此不要在复位或上电时按住它；系统正常运行后可以短按。更换外接大按键时，修改 `Config.h` 中的 `VOICE_BUTTON_PIN`，按键另一端接 GND，并保持低电平有效。
+
+### SD 录音实机验证记录
+
+- 已实际录制并成功播放两条 WAV 文件。
+- SPI 固定为 SCK GPIO7、MISO GPIO8、MOSI GPIO9。
+- 初始化优先尝试 CS GPIO3，并兼容旧示例的 CS GPIO21；每个 CS 依次尝试 4 MHz 和 1 MHz，串口会打印实际成功配置。
+- USER_LED 为 GPIO21、低电平点亮。音频先缓存在 PSRAM，停止录音并熄灭 LED 后再写入 SD，兼容 CS GPIO21 与 LED 共用引脚的情况。
+- 当前单次最长 20 秒，约占用 640 KB PSRAM；修改 `AUDIO_SD_MAX_RECORDING_MS` 时需同步考虑可用 PSRAM。
 
 发送一条测试命令并继续接收数据：
 
@@ -127,7 +135,7 @@ TCP 帧头固定为 28 字节、小端序，详细格式见 [PROTOCOL.md](PROTOC
 
 - 接入具体 IMU：实现 `ImuSensor::begin()` 和 `ImuSensor::read()`。
 - 接入具体 TOF：实现 `TofSensor::begin()` 和 `TofSensor::read()`。
-- 调整语音触发：修改 `Config.h` 中的按钮 GPIO、VAD RMS 阈值、静音时间和最长录音时间。
+- 调整本地录音：修改 `Config.h` 中的按钮 GPIO、录音时长、SD 引脚和 SPI 频率。
 - 增加命令：在 `CommandHandler::handle()` 中解析 `name` 和 `args` 并分发；语音等大数据应使用分片标志发送。
 - 调整画质或功耗：修改 `Config.h` 中的分辨率、JPEG 质量、帧缓冲数量和 `WIFI_MAX_THROUGHPUT`。
 

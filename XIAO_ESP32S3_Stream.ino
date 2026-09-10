@@ -73,9 +73,9 @@ void loop() {
     if (transportService.popReceived(frame)) {
       CommandHandler::handle(frame, transportService);
     }
-
-    sensorManager.poll();
   }
 
+  // Always poll local sensors/button so SD recording does not depend on Wi-Fi.
+  sensorManager.poll();
   delay(1);
 }
