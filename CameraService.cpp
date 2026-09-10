@@ -1,5 +1,6 @@
 #include "CameraService.h"
 
+#include <ESP32_OV5640_AF.h>
 #include <cstring>
 
 #include "Config.h"
@@ -9,6 +10,57 @@ namespace {
 constexpr char STREAM_CONTENT_TYPE[] = "multipart/x-mixed-replace;boundary=frame";
 constexpr char STREAM_BOUNDARY[] = "\r\n--frame\r\n";
 constexpr char STREAM_PART[] = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
+OV5640 ov5640Autofocus;
+
+void initializeSensor(sensor_t *sensor) {
+  if (sensor == nullptr) {
+    Serial.println("Warning: camera sensor handle is unavailable");
+    return;
+  }
+
+  if (sensor->id.PID == OV3660_PID) {
+    Serial.println("OV3660 detected; applying orientation and color correction");
+    sensor->set_vflip(sensor, 1);
+    sensor->set_brightness(sensor, 1);
+    sensor->set_saturation(sensor, -2);
+    return;
+  }
+
+  if (sensor->id.PID != OV5640_PID) {
+    Serial.printf("Camera sensor detected (PID 0x%04x); no model-specific setup\n",
+                  static_cast<unsigned>(sensor->id.PID));
+    return;
+  }
+
+  Serial.println("OV5640 detected");
+  if (!AppConfig::CAMERA_ENABLE_OV5640_AUTOFOCUS) {
+    Serial.println("OV5640 autofocus is disabled in Config.h");
+    return;
+  }
+
+  // Seeed Wiki method 1: identify the sensor, upload its AF firmware, then
+  // switch the lens controller to continuous autofocus mode.
+  if (!ov5640Autofocus.start(sensor)) {
+    Serial.println("Warning: OV5640 autofocus sensor check failed");
+    return;
+  }
+
+  const uint8_t focusInitResult = ov5640Autofocus.focusInit();
+  if (focusInitResult != 0) {
+    Serial.printf("Warning: OV5640 autofocus firmware init failed (%u)\n",
+                  static_cast<unsigned>(focusInitResult));
+    return;
+  }
+  Serial.println("OV5640 autofocus firmware initialized");
+
+  const uint8_t autofocusResult = ov5640Autofocus.autoFocusMode();
+  if (autofocusResult != 0) {
+    Serial.printf("Warning: OV5640 continuous autofocus failed (%u)\n",
+                  static_cast<unsigned>(autofocusResult));
+    return;
+  }
+  Serial.println("OV5640 continuous autofocus enabled");
+}
 }  // namespace
 
 bool CameraService::beginCamera() {
@@ -54,12 +106,7 @@ bool CameraService::beginCamera() {
     return false;
   }
 
-  sensor_t *sensor = esp_camera_sensor_get();
-  if (sensor != nullptr && sensor->id.PID == OV3660_PID) {
-    sensor->set_vflip(sensor, 1);
-    sensor->set_brightness(sensor, 1);
-    sensor->set_saturation(sensor, -2);
-  }
+  initializeSensor(esp_camera_sensor_get());
 
   cameraReady_ = true;
   Serial.println("Camera initialized");

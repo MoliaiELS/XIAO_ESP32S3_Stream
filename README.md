@@ -55,11 +55,12 @@ IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入�
 ## Arduino 配置与上传
 
 1. 在开发板管理器安装 **esp32 by Espressif Systems 3.0.x**。
-2. 选择开发板 `XIAO_ESP32S3`。
-3. 将 PSRAM 设置为 `OPI PSRAM`，建议使用至少 3 MB APP 空间的分区。
-4. 安装 Sense 扩展板、摄像头和包装内的 Wi-Fi 天线。
-5. 按下一节配置 Wi-Fi。
-6. 编译并上传 `XIAO_ESP32S3_Stream.ino`，以 `115200` 波特率打开串口监视器。
+2. 在库管理器中安装 `OV5640 Auto Focus for ESP32 Camera`（版本 0.1.1）。
+3. 选择开发板 `XIAO_ESP32S3`。
+4. 将 PSRAM 设置为 `OPI PSRAM`，建议使用至少 3 MB APP 空间的分区。
+5. 安装 Sense 扩展板、摄像头和包装内的 Wi-Fi 天线。
+6. 按下一节配置 Wi-Fi。
+7. 编译并上传 `XIAO_ESP32S3_Stream.ino`，以 `115200` 波特率打开串口监视器。
 
 ## Wi-Fi 设置
 
