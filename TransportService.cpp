@@ -26,7 +26,9 @@ void TransportService::poll() {
       client_ = incoming;
       client_.setNoDelay(true);
       resetReceive();
-      Serial.println("Laptop data client connected");
+      Serial.printf("Laptop data client connected: remote=%s:%u, local=%s:%u\n",
+                    client_.remoteIP().toString().c_str(), client_.remotePort(),
+                    client_.localIP().toString().c_str(), client_.localPort());
     }
   }
 

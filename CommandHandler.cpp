@@ -17,5 +17,12 @@ void CommandHandler::handle(const ReceivedFrame &frame, TransportService &transp
   const int length = snprintf(acknowledgement, sizeof(acknowledgement),
                               "{\"status\":\"accepted\",\"rx_sequence\":%lu}",
                               static_cast<unsigned long>(frame.sequence));
-  transport.sendFrame(WireProtocol::MessageType::CommandAck, acknowledgement, length);
+  if (transport.sendFrame(WireProtocol::MessageType::CommandAck, acknowledgement,
+                          length)) {
+    Serial.printf("Command #%lu acknowledgement sent\n",
+                  static_cast<unsigned long>(frame.sequence));
+  } else {
+    Serial.printf("Command #%lu acknowledgement failed: client disconnected\n",
+                  static_cast<unsigned long>(frame.sequence));
+  }
 }

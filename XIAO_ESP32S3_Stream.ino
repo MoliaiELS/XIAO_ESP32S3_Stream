@@ -13,7 +13,24 @@ SensorManager sensorManager(transportService);
 
 namespace {
 bool networkServicesStarted = false;
+bool wifiWasConnected = false;
 uint32_t lastWifiAttemptMs = 0;
+uint32_t lastWifiStatusMs = 0;
+
+void printWifiDetails() {
+  const String ip = WiFi.localIP().toString();
+  Serial.println("[WiFi] Connection details:");
+  Serial.printf("[WiFi] SSID=%s, IP=%s, RSSI=%d dBm, channel=%d\n",
+                WiFi.SSID().c_str(), ip.c_str(), WiFi.RSSI(), WiFi.channel());
+  Serial.printf("[WiFi] gateway=%s, subnet=%s, DNS=%s, MAC=%s\n",
+                WiFi.gatewayIP().toString().c_str(),
+                WiFi.subnetMask().toString().c_str(),
+                WiFi.dnsIP().toString().c_str(), WiFi.macAddress().c_str());
+  Serial.printf("[WiFi] Video: http://%s:%u/stream\n", ip.c_str(),
+                AppConfig::VIDEO_PORT);
+  Serial.printf("[WiFi] Data/commands/audio: %s:%u (TCP)\n", ip.c_str(),
+                AppConfig::DATA_PORT);
+}
 
 void connectWifi() {
   WiFi.mode(WIFI_STA);
@@ -21,7 +38,8 @@ void connectWifi() {
   WiFi.setSleep(!AppConfig::WIFI_MAX_THROUGHPUT);
   WiFi.begin(AppConfig::WIFI_SSID, AppConfig::WIFI_PASSWORD);
   lastWifiAttemptMs = millis();
-  Serial.printf("Connecting to Wi-Fi '%s'", AppConfig::WIFI_SSID);
+  Serial.printf("[WiFi] Connecting to '%s' as '%s'\n", AppConfig::WIFI_SSID,
+                AppConfig::HOSTNAME);
 }
 
 void maintainWifi() {
@@ -32,17 +50,32 @@ void maintainWifi() {
         Serial.println("Failed to start the video server");
       }
       networkServicesStarted = true;
+    }
 
-      const String ip = WiFi.localIP().toString();
-      Serial.printf("\nWi-Fi connected: %s\n", ip.c_str());
-      Serial.printf("Video: http://%s:%u/stream\n", ip.c_str(), AppConfig::VIDEO_PORT);
-      Serial.printf("Data/commands: %s:%u (TCP)\n", ip.c_str(), AppConfig::DATA_PORT);
+    if (!wifiWasConnected) {
+      Serial.println("[WiFi] Connected");
+      printWifiDetails();
+      wifiWasConnected = true;
+      lastWifiStatusMs = millis();
+    } else if (millis() - lastWifiStatusMs >=
+               AppConfig::WIFI_STATUS_INTERVAL_MS) {
+      Serial.printf("[WiFi] Online: IP=%s, RSSI=%d dBm, channel=%d\n",
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+                    WiFi.channel());
+      lastWifiStatusMs = millis();
     }
     return;
   }
 
+  if (wifiWasConnected) {
+    Serial.printf("[WiFi] Connection lost (status=%d); status LED is off\n",
+                  static_cast<int>(WiFi.status()));
+    wifiWasConnected = false;
+  }
+
   if (millis() - lastWifiAttemptMs >= AppConfig::WIFI_RETRY_MS) {
-    Serial.println("\nWi-Fi disconnected; reconnecting...");
+    Serial.printf("[WiFi] Still offline (status=%d); reconnecting to '%s'...\n",
+                  static_cast<int>(WiFi.status()), AppConfig::WIFI_SSID);
     WiFi.disconnect();
     WiFi.begin(AppConfig::WIFI_SSID, AppConfig::WIFI_PASSWORD);
     lastWifiAttemptMs = millis();
