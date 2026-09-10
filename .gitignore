@@ -7,9 +7,6 @@ build/
 *.map
 *.uf2
 
-# Local credentials
-secrets.h
-
 # Editors and OS files
 .vscode/
 .idea/

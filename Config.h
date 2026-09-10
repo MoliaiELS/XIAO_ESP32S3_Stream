@@ -2,9 +2,13 @@
 
 #include <Arduino.h>
 #include "esp_camera.h"
-#include "secrets.h"
 
 namespace AppConfig {
+// Wi-Fi credentials. This file is tracked by Git; do not commit real passwords
+// if the repository may be shared or published.
+constexpr char WIFI_SSID[] = "YOUR_WIFI_SSID";
+constexpr char WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
+
 constexpr char HOSTNAME[] = "xiao-wearable";
 constexpr uint16_t VIDEO_PORT = 80;
 constexpr uint16_t DATA_PORT = 9000;

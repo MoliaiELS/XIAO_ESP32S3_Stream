@@ -38,9 +38,7 @@ IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入�
 | 文件 | 层级与作用 |
 | --- | --- |
 | `XIAO_ESP32S3_Stream.ino` | 应用入口；初始化摄像头、传感器和 Wi-Fi，维护重连并调度各服务。 |
-| `Config.h` | 集中配置主机名、端口、Wi-Fi 重试、视频分辨率、JPEG 质量及状态周期。 |
-| `secrets.h` | 本地 Wi-Fi 凭据；已被 Git 忽略。 |
-| `secrets.example.h` | 可提交的 Wi-Fi 配置模板。 |
+| `Config.h` | 集中配置 Wi-Fi 凭据、主机名、端口、重试周期、视频分辨率和 JPEG 质量。 |
 | `camera_pins.h` | XIAO ESP32S3 Sense 摄像头 GPIO 定义。 |
 | `CameraService.h/.cpp` | 初始化摄像头，提供 `/` 预览页面和 `/stream` MJPEG 流。 |
 | `TransportProtocol.h/.cpp` | 定义二进制帧、消息类型、传感器载荷及 CRC32 算法。 |
@@ -52,7 +50,7 @@ IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入�
 | `MicrophoneSensor.h/.cpp` | PDM 麦克风占位；预留 GPIO 41/42、16 kHz 单声道 PCM16 接口。 |
 | `PROTOCOL.md` | TCP 二进制协议的完整字段、字节序和载荷说明。 |
 | `laptop_client.py` | 无第三方依赖的参考客户端；接收数据帧并可发送一次 JSON 命令。 |
-| `.gitignore` | 忽略凭据、Arduino 构建产物和编辑器临时文件。 |
+| `.gitignore` | 忽略 Arduino 构建产物和编辑器临时文件。 |
 
 ## Arduino 配置与上传
 
@@ -68,14 +66,14 @@ IMU、TOF 和麦克风目前仅为接口占位，不生成模拟数据；接入�
 设备使用 **STA 模式**加入现有无线网络，不会自行创建热点。XIAO ESP32S3 只支持 2.4 GHz Wi-Fi；laptop 应接入同一个局域网。
 
 1. 确认板载 U.FL 接口已经安装外置 Wi-Fi 天线。
-2. 打开项目根目录中的 `secrets.h`，填写网络名称和密码：
+2. 打开项目根目录中的 `Config.h`，填写网络名称和密码：
 
 ```cpp
-#define WIFI_SSID "你的 2.4GHz Wi-Fi 名称"
-#define WIFI_PASSWORD "你的 Wi-Fi 密码"
+constexpr char WIFI_SSID[] = "你的 2.4GHz Wi-Fi 名称";
+constexpr char WIFI_PASSWORD[] = "你的 Wi-Fi 密码";
 ```
 
-如果没有 `secrets.h`，复制 `secrets.example.h` 并改名。`secrets.h` 已写入 `.gitignore`，不会随普通 Git 提交泄露密码。
+`Config.h` 会被 Git 跟踪。如果仓库可能公开或分享，请勿提交真实密码；已提交的密码还需要从 Git 历史中清理。
 
 3. 上传程序并打开串口监视器。连接成功后会显示类似信息：
 

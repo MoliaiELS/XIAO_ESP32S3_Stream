@@ -19,9 +19,9 @@ void connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(AppConfig::HOSTNAME);
   WiFi.setSleep(!AppConfig::WIFI_MAX_THROUGHPUT);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(AppConfig::WIFI_SSID, AppConfig::WIFI_PASSWORD);
   lastWifiAttemptMs = millis();
-  Serial.printf("Connecting to Wi-Fi '%s'", WIFI_SSID);
+  Serial.printf("Connecting to Wi-Fi '%s'", AppConfig::WIFI_SSID);
 }
 
 void maintainWifi() {
@@ -44,7 +44,7 @@ void maintainWifi() {
   if (millis() - lastWifiAttemptMs >= AppConfig::WIFI_RETRY_MS) {
     Serial.println("\nWi-Fi disconnected; reconnecting...");
     WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(AppConfig::WIFI_SSID, AppConfig::WIFI_PASSWORD);
     lastWifiAttemptMs = millis();
   }
 }
