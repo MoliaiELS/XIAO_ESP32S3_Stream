@@ -1,5 +1,5 @@
 #pragma once
 
 // Copy this file to secrets.h and fill in your 2.4 GHz Wi-Fi credentials.
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID "moliai"
+#define WIFI_PASSWORD "0o4z22vl"
