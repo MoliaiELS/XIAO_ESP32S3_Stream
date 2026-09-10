@@ -7,8 +7,8 @@ namespace AppConfig
 {
     // A BOOT-button recording can be sent to the connected laptop, saved to
     // microSD, or both. Network sending requires laptop_client.py to be connected.
-    constexpr bool ENABLE_AUDIO_TCP_STREAM = true;
-    constexpr bool ENABLE_SD_AUDIO_RECORDING = true;
+    constexpr bool ENABLE_AUDIO_TCP_STREAM = true;   // 是否发送到电脑
+    constexpr bool ENABLE_SD_AUDIO_RECORDING = true; // 是否本地保存
 
     // Wi-Fi credentials. This file is tracked by Git; do not commit real passwords
     // if the repository may be shared or published.
