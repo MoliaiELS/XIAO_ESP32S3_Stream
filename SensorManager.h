@@ -1,8 +1,9 @@
 #pragma once
 
+#include "HapticMotor.h"
 #include "ImuSensor.h"
 #include "MicrophoneSensor.h"
-#include "TofSensor.h"
+#include "UltrasonicSensor.h"
 #include "TransportService.h"
 
 class SensorManager {
@@ -10,6 +11,15 @@ class SensorManager {
   explicit SensorManager(TransportService &transport) : transport_(transport) {}
   void begin();
   void poll();
+  bool hapticBeep(uint8_t preset) { return hapticMotor_.beep(preset); }
+  bool hapticPulse(uint8_t strength, uint32_t durationMs) {
+    return hapticMotor_.pulse(strength, durationMs);
+  }
+  bool hapticStop() { return hapticMotor_.stop(); }
+  bool hapticReady() const { return hapticMotor_.ready(); }
+  bool hapticActive() const { return hapticMotor_.active(); }
+  bool hapticFault() const { return hapticMotor_.fault(); }
+  void hapticDebug() const { hapticMotor_.debug(); }
 
  private:
   bool buttonPressed();
@@ -27,11 +37,13 @@ class SensorManager {
 
   TransportService &transport_;
   ImuSensor imu_;
-  TofSensor tof_;
+  UltrasonicSensor ultrasonic_;
   MicrophoneSensor microphone_;
+  HapticMotor hapticMotor_;
   uint8_t *audioBuffer_ = nullptr;
   size_t audioBufferCapacity_ = 0;
   uint32_t lastStatusMs_ = 0;
+  uint32_t lastSensorSerialStatusMs_ = 0;
   bool voiceRecording_ = false;
   bool savingAudio_ = false;
   bool recordingSendEnabled_ = false;

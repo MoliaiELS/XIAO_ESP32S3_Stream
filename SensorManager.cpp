@@ -56,9 +56,16 @@ bool writeWavHeader(File &file, uint32_t pcmBytes) {
 }  // namespace
 
 void SensorManager::begin() {
-  imu_.begin();
-  tof_.begin();
+  if (AppConfig::ENABLE_IMU) imu_.begin();
+  if (AppConfig::ENABLE_ULTRASONIC) ultrasonic_.begin();
   microphone_.begin();
+  if (AppConfig::ENABLE_HAPTIC_MOTOR) {
+    hapticMotor_.begin(AppConfig::HAPTIC_SDA_PIN, AppConfig::HAPTIC_SCL_PIN,
+                       AppConfig::HAPTIC_PEAK_VOLTS,
+                       AppConfig::HAPTIC_FREQUENCY_HZ);
+  } else {
+    Serial.println("[HAPTIC] Disabled in Config.h");
+  }
 
   pinMode(AppConfig::VOICE_BUTTON_PIN,
           AppConfig::VOICE_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
@@ -140,7 +147,19 @@ bool SensorManager::tryMountMicroSd(uint8_t csPin, uint32_t frequencyHz) {
 }
 
 void SensorManager::poll() {
+  imu_.poll();
+  ultrasonic_.poll();
+  hapticMotor_.update();
   updateStatusLed();
+
+  const uint32_t now = millis();
+  if (uint32_t(now - lastSensorSerialStatusMs_) >=
+      AppConfig::SENSOR_SERIAL_STATUS_INTERVAL_MS) {
+    if (AppConfig::ENABLE_IMU) imu_.debug();
+    if (AppConfig::ENABLE_ULTRASONIC) ultrasonic_.debug();
+    if (AppConfig::ENABLE_HAPTIC_MOTOR) hapticMotor_.debug();
+    lastSensorSerialStatusMs_ = now;
+  }
 
   if (AppConfig::ENABLE_SD_AUDIO_RECORDING ||
       AppConfig::ENABLE_AUDIO_TCP_STREAM) {
@@ -163,9 +182,10 @@ void SensorManager::poll() {
     transport_.sendFrame(WireProtocol::MessageType::Imu, &imuSample, sizeof(imuSample));
   }
 
-  WireProtocol::TofPayload tofSample;
-  if (tof_.read(tofSample)) {
-    transport_.sendFrame(WireProtocol::MessageType::Tof, &tofSample, sizeof(tofSample));
+  WireProtocol::UltrasonicPayload ultrasonicSample;
+  if (ultrasonic_.read(ultrasonicSample)) {
+    transport_.sendFrame(WireProtocol::MessageType::Ultrasonic,
+                         &ultrasonicSample, sizeof(ultrasonicSample));
   }
 
   if (millis() - lastStatusMs_ >= AppConfig::STATUS_INTERVAL_MS) sendStatus();
@@ -294,6 +314,7 @@ void SensorManager::stopVoiceRecording(const char *reason) {
           break;
         }
         offset += written;
+        hapticMotor_.update();
         updateStatusLed();
       }
       audioFile.close();
@@ -443,8 +464,9 @@ void SensorManager::sendStatus() {
   status.freeHeapBytes = ESP.getFreeHeap();
   status.wifiRssiDbm = static_cast<int8_t>(WiFi.RSSI());
   status.sensorFlags = (imu_.available() ? 1u : 0u) |
-                       (tof_.available() ? 2u : 0u) |
-                       (microphone_.available() ? 4u : 0u);
+                       (ultrasonic_.available() ? 2u : 0u) |
+                       (microphone_.available() ? 4u : 0u) |
+                       (hapticMotor_.ready() ? 8u : 0u);
   transport_.sendFrame(WireProtocol::MessageType::Status, &status, sizeof(status));
   lastStatusMs_ = millis();
 }

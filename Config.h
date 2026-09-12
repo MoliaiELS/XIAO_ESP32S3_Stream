@@ -8,7 +8,27 @@ namespace AppConfig
     // A BOOT-button recording can be sent to the connected laptop, saved to
     // microSD, or both. Network sending requires laptop_client.py to be connected.
     constexpr bool ENABLE_AUDIO_TCP_STREAM = true;   // 是否发送到电脑
-    constexpr bool ENABLE_SD_AUDIO_RECORDING = true; // 是否本地保存
+    // GPIO3 is shared by the Sense microSD CS and the ultrasonic UART RX.
+    // Keep SD saving off while the ultrasonic sensor uses the wiring below.
+    constexpr bool ENABLE_SD_AUDIO_RECORDING = false; // 是否本地保存
+
+    constexpr bool ENABLE_IMU = true;
+    constexpr int8_t IMU_RX_PIN = 44;       // D7 <- IMU TX
+    constexpr int8_t IMU_TX_PIN = -1;       // set to 43 (D6) only when needed
+    constexpr uint32_t IMU_BAUD = 115200;
+    constexpr uint32_t IMU_STALE_MS = 500;
+
+    constexpr bool ENABLE_ULTRASONIC = true;
+    constexpr int8_t ULTRASONIC_RX_PIN = 3; // D2 <- DYP-A22 TX
+    constexpr uint32_t ULTRASONIC_BAUD = 115200;
+    constexpr bool ULTRASONIC_VALUES_ARE_MICROSECONDS = false;
+    constexpr uint32_t ULTRASONIC_STALE_MS = 1500;
+
+    constexpr bool ENABLE_HAPTIC_MOTOR = true;
+    constexpr int8_t HAPTIC_SDA_PIN = 5;    // D4
+    constexpr int8_t HAPTIC_SCL_PIN = 6;    // D5
+    constexpr float HAPTIC_PEAK_VOLTS = 2.5f;
+    constexpr float HAPTIC_FREQUENCY_HZ = 200.0f;
 
     // Wi-Fi credentials. This file is tracked by Git; do not commit real passwords
     // if the repository may be shared or published.
@@ -58,4 +78,28 @@ namespace AppConfig
     constexpr uint32_t SD_SPI_FREQUENCY_HZ = 4000000;
 
     constexpr uint32_t STATUS_INTERVAL_MS = 5000;
+    constexpr uint32_t SENSOR_SERIAL_STATUS_INTERVAL_MS = 10000;
+
+    static_assert(!(ENABLE_SD_AUDIO_RECORDING && ENABLE_ULTRASONIC &&
+                    SD_CS_PIN == ULTRASONIC_RX_PIN),
+                  "GPIO3 conflict: disable SD audio saving or ultrasonic UART");
+    static_assert(!ENABLE_IMU || IMU_TX_PIN < 0 || IMU_RX_PIN != IMU_TX_PIN,
+                  "IMU RX and TX must use different pins");
+    static_assert(!ENABLE_HAPTIC_MOTOR || HAPTIC_SDA_PIN != HAPTIC_SCL_PIN,
+                  "Haptic SDA and SCL must use different pins");
+    static_assert(!(ENABLE_IMU && ENABLE_ULTRASONIC &&
+                    (IMU_RX_PIN == ULTRASONIC_RX_PIN ||
+                     (IMU_TX_PIN >= 0 && IMU_TX_PIN == ULTRASONIC_RX_PIN))),
+                  "IMU UART and ultrasonic UART pins conflict");
+    static_assert(!(ENABLE_HAPTIC_MOTOR && ENABLE_ULTRASONIC &&
+                    (HAPTIC_SDA_PIN == ULTRASONIC_RX_PIN ||
+                     HAPTIC_SCL_PIN == ULTRASONIC_RX_PIN)),
+                  "Haptic I2C and ultrasonic UART pins conflict");
+    static_assert(!(ENABLE_HAPTIC_MOTOR && ENABLE_IMU &&
+                    (HAPTIC_SDA_PIN == IMU_RX_PIN ||
+                     HAPTIC_SCL_PIN == IMU_RX_PIN ||
+                     (IMU_TX_PIN >= 0 &&
+                      (HAPTIC_SDA_PIN == IMU_TX_PIN ||
+                       HAPTIC_SCL_PIN == IMU_TX_PIN)))),
+                  "Haptic I2C and IMU UART pins conflict");
 } // namespace AppConfig

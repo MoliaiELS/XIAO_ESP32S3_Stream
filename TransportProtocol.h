@@ -4,12 +4,12 @@
 
 namespace WireProtocol {
 constexpr uint32_t MAGIC = 0x4F414958;  // bytes on wire: "XIAO"
-constexpr uint8_t VERSION = 2;
+constexpr uint8_t VERSION = 3;
 constexpr size_t MAX_RX_PAYLOAD = 1024;
 
 enum class MessageType : uint8_t {
   Imu = 0x10,
-  Tof = 0x11,
+  Ultrasonic = 0x11,
   AudioPcm = 0x12,
   Status = 0x13,
   Command = 0x20,
@@ -37,18 +37,16 @@ struct FrameHeader {
 };
 
 struct ImuPayload {
-  float accelMps2[3];
-  float gyroRadps[3];
   float quaternionWxyz[4];
-  float temperatureC;
+  float rpyRad[3];
 };
 
-struct TofPayload {
+struct UltrasonicPayload {
   uint16_t distanceMm;
-  uint16_t signalRate;
-  uint16_t ambientRate;
-  uint8_t rangeStatus;
-  uint8_t reserved;
+  uint16_t rawValue;
+  uint8_t status;  // 0 waiting, 1 distance, 2 no target, 3 interference, 4 invalid
+  uint8_t unit;    // 0 millimetres, 1 microseconds (converted to distanceMm)
+  uint16_t reserved;
 };
 
 // Immediately followed by sampleCount * channels signed little-endian samples.
@@ -65,12 +63,15 @@ struct StatusPayload {
   uint32_t uptimeMs;
   uint32_t freeHeapBytes;
   int8_t wifiRssiDbm;
-  uint8_t sensorFlags;  // bit0 IMU, bit1 TOF, bit2 microphone
+  uint8_t sensorFlags;  // bit0 IMU, bit1 ultrasonic, bit2 microphone, bit3 haptic
   uint16_t reserved;
 };
 #pragma pack(pop)
 
 static_assert(sizeof(FrameHeader) == 28, "Unexpected protocol header layout");
+static_assert(sizeof(ImuPayload) == 28, "Unexpected IMU payload layout");
+static_assert(sizeof(UltrasonicPayload) == 8,
+              "Unexpected ultrasonic payload layout");
 static_assert(sizeof(AudioPcmPrefix) == 16, "Unexpected audio prefix layout");
 
 uint32_t crc32(const uint8_t *data, size_t length);

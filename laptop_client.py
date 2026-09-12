@@ -13,9 +13,9 @@ import wave
 import zlib
 
 MAGIC = 0x4F414958
-VERSION = 2
+VERSION = 3
 TYPE_IMU = 0x10
-TYPE_TOF = 0x11
+TYPE_ULTRASONIC = 0x11
 TYPE_AUDIO_PCM = 0x12
 TYPE_STATUS = 0x13
 TYPE_COMMAND = 0x20
@@ -104,13 +104,16 @@ def send_command(sock: socket.socket, command: dict, sequence: int = 0) -> None:
 def describe(message_type: int, payload: bytes) -> str:
     if message_type == TYPE_STATUS and len(payload) == 12:
         uptime, heap, rssi, flags, _ = struct.unpack("<IIbBH", payload)
-        return f"status uptime={uptime}ms heap={heap}B rssi={rssi}dBm sensors=0b{flags:03b}"
-    if message_type == TYPE_IMU and len(payload) == 44:
-        values = struct.unpack("<11f", payload)
-        return f"imu accel={values[0:3]} gyro={values[3:6]} quat={values[6:10]} temp={values[10]:.1f}C"
-    if message_type == TYPE_TOF and len(payload) == 8:
-        distance, signal, ambient, status, _ = struct.unpack("<HHHBB", payload)
-        return f"tof distance={distance}mm signal={signal} ambient={ambient} status={status}"
+        return f"status uptime={uptime}ms heap={heap}B rssi={rssi}dBm sensors=0b{flags:04b}"
+    if message_type == TYPE_IMU and len(payload) == 28:
+        values = struct.unpack("<7f", payload)
+        return f"imu quat_wxyz={values[0:4]} rpy_rad={values[4:7]}"
+    if message_type == TYPE_ULTRASONIC and len(payload) == 8:
+        distance, raw, status, unit, _ = struct.unpack("<HHBBH", payload)
+        names = {0: "waiting", 1: "distance", 2: "no_target", 3: "interference", 4: "invalid"}
+        distance_text = "invalid" if distance == 0xFFFF else f"{distance}mm"
+        unit_text = "us" if unit else "mm"
+        return f"ultrasonic distance={distance_text} raw={raw}{unit_text} status={names.get(status, status)}"
     if message_type in (TYPE_COMMAND, TYPE_COMMAND_ACK):
         return payload.decode("utf-8", errors="replace")
     return f"type=0x{message_type:02x} payload={len(payload)} bytes"

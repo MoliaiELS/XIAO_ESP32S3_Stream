@@ -104,7 +104,7 @@ void loop() {
 
     ReceivedFrame frame;
     if (transportService.popReceived(frame)) {
-      CommandHandler::handle(frame, transportService);
+      CommandHandler::handle(frame, transportService, sensorManager);
     }
   }
 

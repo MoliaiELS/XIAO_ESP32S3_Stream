@@ -33,3 +33,4 @@ class TwoWire {
   uint8_t address_ = 0, pointer_ = 0;
   std::vector<uint8_t> tx_;
 };
+extern TwoWire Wire;

@@ -13,5 +13,6 @@ struct FakeSerial {
     char text[512]; va_list args; va_start(args, fmt);
     vsnprintf(text, sizeof(text), fmt, args); va_end(args); output += text;
   }
+  void println(const char* text) { output += text; output += '\n'; }
 };
 extern FakeSerial Serial;

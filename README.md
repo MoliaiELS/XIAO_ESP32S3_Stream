@@ -9,9 +9,11 @@
 - 定期发送设备运行时间、剩余内存、Wi-Fi 信号和传感器状态。
 - 接收 UTF-8 JSON 命令，输出到串口并返回确认帧。
 - 使用板载 BOOT 键触发 16 kHz、16-bit、单声道录音：可实时发送给 laptop，也可同时保存为 microSD 上的 WAV 文件。
-- 已定义 IMU、TOF 数据格式及驱动接口。
+- 通过 UART1 接收 `7E 23` 协议 IMU 的四元数和 RPY，通过 TCP 实时上传。
+- 通过 UART2 接收 DYP-A22 自动输出的距离、无目标和干扰状态（替代原 TOF 占位）。
+- 通过 I²C 驱动 DRV2605L + LRA 马达，支持 laptop 命令触发非阻塞震动。
 
-IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件后再填写对应采集代码。麦克风已能录制真实 PCM、通过 TCP 实时发送并按配置保存 WAV。下行命令目前只确认收到，不执行具体动作。
+所有传感器均不生成模拟数据。没有收到合法硬件数据时不会上传伪造样本；串口每 10 秒输出一次 IMU、超声波和马达诊断统计。
 
 ## 程序层级
 
@@ -21,8 +23,10 @@ IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件�
 │  └─ HTTP MJPEG 视频流
 ├─ 传感器层 SensorManager
 │  ├─ ImuSensor
-│  ├─ TofSensor
+│  ├─ UltrasonicSensor
 │  └─ MicrophoneSensor
+├─ 执行器 HapticMotor
+│  └─ I²C DRV2605L/LRA 非阻塞脉冲
 ├─ 双向传输层 TransportService
 │  ├─ 上传传感器、音频和状态帧
 │  └─ 接收 laptop 命令帧
@@ -39,19 +43,40 @@ IMU、TOF 目前仅为接口占位，不生成模拟数据；接入具体硬件�
 | 文件 | 层级与作用 |
 | --- | --- |
 | `XIAO_ESP32S3_Stream.ino` | 应用入口；初始化摄像头、传感器和 Wi-Fi，维护重连并调度各服务。 |
-| `Config.h` | 集中配置 Wi-Fi、端口、视频参数、音频发送/保存开关、录音时长、LED 和 SD 引脚。 |
+| `Config.h` | 集中配置 Wi-Fi、端口、视频、IMU、超声波、马达、音频、LED 和 SD 参数，并在编译期检查关键引脚冲突。 |
 | `camera_pins.h` | XIAO ESP32S3 Sense 摄像头 GPIO 定义。 |
 | `CameraService.h/.cpp` | 初始化摄像头，提供 `/` 预览页面和 `/stream` MJPEG 流。 |
 | `TransportProtocol.h/.cpp` | 定义二进制帧、消息类型、传感器载荷及 CRC32 算法。 |
 | `TransportService.h/.cpp` | TCP 服务端；处理连接、拆包、校验、收发序号和完整写入。只允许一个 laptop 客户端。 |
-| `CommandHandler.h/.cpp` | 处理 `Command` 帧；当前打印 JSON，并返回 `CommandAck`。后续命令逻辑从这里扩展。 |
+| `CommandHandler.h/.cpp` | 处理 JSON 命令、执行马达动作并返回 `CommandAck`；未知命令仍作为预留格式确认。 |
 | `SensorManager.h/.cpp` | 轮询传感器，处理 BOOT 键、状态 LED、PCM 音频发送、PSRAM 缓存、SD 探测及 WAV 保存。 |
-| `ImuSensor.h/.cpp` | IMU 驱动占位；输出加速度、角速度、四元数和温度。 |
-| `TofSensor.h/.cpp` | TOF 驱动占位；输出距离、信号强度、环境强度和测距状态。 |
+| `ImuSensor.h/.cpp` | UART1 IMU 驱动；解析 `7E 23`、校验累加和，输出四元数 WXYZ 和 RPY 弧度。 |
+| `UltrasonicSensor.h/.cpp` | UART2 DYP-A22 自动版驱动；校验四字节帧并区分距离、无目标和同频干扰。 |
+| `HapticMotor.h` | DRV2605L/LRA I²C 驱动；配置、读回校验、限幅、定时停止和故障锁存。 |
 | `MicrophoneSensor.h/.cpp` | 使用 `ESP_I2S` 驱动 GPIO 41/42 的 PDM 麦克风，读取单声道 PCM16。 |
 | `PROTOCOL.md` | TCP 二进制协议的完整字段、字节序和载荷说明。 |
 | `laptop_client.py` | 无第三方依赖的参考客户端；接收数据和音频、生成 laptop 端 WAV，并可发送一次 JSON 命令。 |
+| `tests/` | 保留已集成驱动的协议/逻辑测试；旧 DM-IMU 和重复独立示例已删除，可从 Git 历史恢复。 |
 | `.gitignore` | 忽略 Arduino 构建产物和编辑器临时文件。 |
+
+## 外设接线与冲突
+
+| 模块 | 通信 | XIAO ESP32S3 引脚 |
+| --- | --- | --- |
+| DRV2605L | I²C，地址 `0x5A` | D4/GPIO5 → SDA，D5/GPIO6 → SCL |
+| IMU | UART1，115200 8N1 | D7/GPIO44 ← IMU TX；可选 D6/GPIO43 → IMU RX |
+| DYP-A22 自动版 | UART2，115200 8N1 | D2/GPIO3 ← 模块 TX；模块 RX 悬空 |
+
+IMU 默认仅接收，因此 `IMU_TX_PIN=-1`；只有确实需要向模块查询时才改为 GPIO43。DYP-A22 的 RX 是上电时选择处理值/实时值的输入，不是常规 UART RX，本接法保持悬空。
+
+**GPIO3 同时是当前 Sense microSD 的 CS 和超声波 RX，不能同时使用。** 默认配置启用超声波、关闭 SD 本地保存；音频仍会通过 TCP 发送。如果保持现有 GPIO3 接线并需要 SD 录音，应设置：
+
+```cpp
+constexpr bool ENABLE_ULTRASONIC = false;
+constexpr bool ENABLE_SD_AUDIO_RECORDING = true;
+```
+
+若两项在 GPIO3 接法下同时开启，`Config.h` 的 `static_assert` 会让编译明确失败。另一种方案是把超声波 TX 改接空闲的 D3/GPIO4，并将 `ULTRASONIC_RX_PIN` 改为 `4`，即可同时启用超声波和 SD。GPIO5/6 与摄像头 GPIO39/40、麦克风 GPIO41/42、两路 UART 之间没有数字引脚重叠。摄像头、Wi-Fi、超声波峰值电流和马达同时工作时仍需核算 3.3V 电源容量，并保持所有外设共地。
 
 ## Arduino 配置与上传
 
@@ -109,10 +134,10 @@ python .\laptop_client.py 设备IP
 
 ```cpp
 constexpr bool ENABLE_AUDIO_TCP_STREAM = true;   // 实时发送到 laptop
-constexpr bool ENABLE_SD_AUDIO_RECORDING = true; // 同时保存到本地 microSD
+constexpr bool ENABLE_SD_AUDIO_RECORDING = false; // GPIO3 当前用于超声波
 ```
 
-两项都为 `true` 时同时发送和保存。只开 SD 时可完全离线录音；只开 TCP 时不挂载 SD，也不占用约 640 KB 的录音缓存。若启用的目的地当前都不可用，按键后串口会说明无法开始的原因。
+关闭超声波后，两项可同时为 `true`，此时同时发送和保存。只开 SD 时可完全离线录音；只开 TCP 时不挂载 SD，也不占用约 640 KB 的录音缓存。若启用的目的地当前都不可用，按键后串口会说明无法开始的原因。
 
 USER_LED 状态如下：
 
@@ -140,12 +165,22 @@ BOOT 键连接 GPIO0。GPIO0 是启动配置引脚，因此不要在复位或上
 python .\laptop_client.py 设备IP --command '{"id":"1","name":"ping","args":{}}'
 ```
 
+马达命令示例（每次启动客户端发送一条，客户端随后继续接收数据）：
+
+```powershell
+python .\laptop_client.py 设备IP --command '{"id":"2","name":"motor_beep","args":{"preset":2}}'
+python .\laptop_client.py 设备IP --command '{"id":"3","name":"motor_pulse","args":{"strength":80,"duration_ms":250}}'
+python .\laptop_client.py 设备IP --command '{"id":"4","name":"motor_stop","args":{}}'
+```
+
+`preset` 为 1～3；自定义强度为 1～127，时长为 1～1000 ms。还支持 `motor_status`，以及同名的 `haptic_*` 别名。
+
 TCP 帧头固定为 28 字节、小端序，详细格式见 [PROTOCOL.md](PROTOCOL.md)。主要消息类型如下：
 
 | 类型 | 方向 | 内容 |
 | --- | --- | --- |
 | `0x10` | 设备 → laptop | IMU |
-| `0x11` | 设备 → laptop | TOF |
+| `0x11` | 设备 → laptop | DYP-A22 超声波距离/状态 |
 | `0x12` | 设备 → laptop | PCM 音频块 |
 | `0x13` | 设备 → laptop | 设备状态 |
 | `0x20` | laptop → 设备 | JSON 命令 |
@@ -153,10 +188,9 @@ TCP 帧头固定为 28 字节、小端序，详细格式见 [PROTOCOL.md](PROTOC
 
 ## 后续扩展位置
 
-- 接入具体 IMU：实现 `ImuSensor::begin()` 和 `ImuSensor::read()`。
-- 接入具体 TOF：实现 `TofSensor::begin()` 和 `TofSensor::read()`。
-- 调整本地录音：修改 `Config.h` 中的按钮 GPIO、录音时长、SD 引脚和 SPI 频率。
-- 增加命令：在 `CommandHandler::handle()` 中解析 `name` 和 `args` 并分发；语音等大数据应使用分片标志发送。
+- 更换 IMU 或超声波型号时，分别替换 `ImuSensor` 或 `UltrasonicSensor` 的解析器，不能只改波特率。
+- 调整本地录音：先处理 GPIO3 与超声波的冲突，再修改录音时长、SD 引脚和 SPI 频率。
+- 增加命令：在 `CommandHandler::handle()` 中增加名称分发；语音等大数据应使用分片标志发送。
 - 调整画质或功耗：修改 `Config.h` 中的分辨率、JPEG 质量、帧缓冲数量和 `WIFI_MAX_THROUGHPUT`。
 
 ## 使用限制
