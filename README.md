@@ -37,25 +37,20 @@
 | --- | --- | --- |
 | DRV2605L | I²C，地址 `0x5A` | D4/GPIO5 → SDA，D5/GPIO6 → SCL |
 | IMU | UART1，115200 8N1 | D7/GPIO44 ← IMU TX；可选 D6/GPIO43 → IMU RX |
-| DYP-A22 自动版 | UART2，115200 8N1 | D2/GPIO3 ← 模块 TX；模块 RX 悬空 |
+| DYP-A22 自动版 | UART2，115200 8N1 | D0/GPIO1 ← 模块 TX；模块 RX 悬空 |
 
 所有模块必须共地。IMU 默认仅接收，因此 `IMU_TX_PIN=-1`。
 
-### GPIO3 冲突
+### GPIO1 与 microSD
 
-Sense 扩展板的 microSD CS 和当前超声波 RX 都使用 GPIO3，不能同时启用。默认配置为：
+超声波接收改用 D0/GPIO1，microSD CS 继续使用 GPIO3，两者不再冲突。GPIO1 同时是 D0/A0，作为 UART 后不能再用于模拟量采集。默认配置仍不保存到 SD：
 
 ```cpp
 constexpr bool ENABLE_ULTRASONIC = true;
 constexpr bool ENABLE_SD_AUDIO_RECORDING = false;
 ```
 
-这不会影响视频、传感器或音频通过 Wi-Fi 发送。若需要本地录音，可选择：
-
-- 关闭超声波并启用 SD；或
-- 将超声波 TX 改接 D3/GPIO4，并把 `ULTRASONIC_RX_PIN` 改为 `4`。
-
-若 GPIO3 上同时开启两项功能，`Config.h` 会在编译时报告冲突。
+这不会影响视频、传感器或音频通过 Wi-Fi 发送。需要本地录音时，可直接将 `ENABLE_SD_AUDIO_RECORDING` 改为 `true`。请确保 DYP-A22 TX 电平不超过 3.3V；如果是 5V，需要使用分压或电平转换。
 
 ## Arduino 配置
 

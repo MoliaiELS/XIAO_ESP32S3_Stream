@@ -8,8 +8,8 @@ namespace AppConfig
     // A BOOT-button recording can be sent to the connected laptop, saved to
     // microSD, or both. Network sending requires laptop_client.py to be connected.
     constexpr bool ENABLE_AUDIO_TCP_STREAM = true;   // 是否发送到电脑
-    // GPIO3 is shared by the Sense microSD CS and the ultrasonic UART RX.
-    // Keep SD saving off while the ultrasonic sensor uses the wiring below.
+    // Local saving is optional. Ultrasonic RX uses GPIO1, so it no longer
+    // conflicts with the Sense microSD CS on GPIO3.
     constexpr bool ENABLE_SD_AUDIO_RECORDING = false; // 是否本地保存
 
     constexpr bool ENABLE_IMU = true;
@@ -19,7 +19,7 @@ namespace AppConfig
     constexpr uint32_t IMU_STALE_MS = 500;
 
     constexpr bool ENABLE_ULTRASONIC = true;
-    constexpr int8_t ULTRASONIC_RX_PIN = 3; // D2 <- DYP-A22 TX
+    constexpr int8_t ULTRASONIC_RX_PIN = 1; // D0 <- DYP-A22 TX
     constexpr uint32_t ULTRASONIC_BAUD = 115200;
     constexpr bool ULTRASONIC_VALUES_ARE_MICROSECONDS = false;
     constexpr uint32_t ULTRASONIC_STALE_MS = 1500;
@@ -82,7 +82,7 @@ namespace AppConfig
 
     static_assert(!(ENABLE_SD_AUDIO_RECORDING && ENABLE_ULTRASONIC &&
                     SD_CS_PIN == ULTRASONIC_RX_PIN),
-                  "GPIO3 conflict: disable SD audio saving or ultrasonic UART");
+                  "microSD CS and ultrasonic UART RX pins conflict");
     static_assert(!ENABLE_IMU || IMU_TX_PIN < 0 || IMU_RX_PIN != IMU_TX_PIN,
                   "IMU RX and TX must use different pins");
     static_assert(!ENABLE_HAPTIC_MOTOR || HAPTIC_SDA_PIN != HAPTIC_SCL_PIN,
