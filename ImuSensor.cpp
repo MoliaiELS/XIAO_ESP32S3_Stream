@@ -116,7 +116,15 @@ bool ImuSensor::begin() {
   uart_.setRxBufferSize(4096);
   uart_.begin(AppConfig::IMU_BAUD, SERIAL_8N1, AppConfig::IMU_RX_PIN,
               AppConfig::IMU_TX_PIN);
-  available_ = true;
+  available_ = static_cast<bool>(uart_);
+  Serial.printf("[IMU] UART1 started=%d heap=%lu psram=%lu RX=GPIO%d TX=%d\n",
+                available_, static_cast<unsigned long>(ESP.getFreeHeap()),
+                static_cast<unsigned long>(ESP.getPsramSize()),
+                AppConfig::IMU_RX_PIN, AppConfig::IMU_TX_PIN);
+  if (!available_) {
+    Serial.println("[IMU] UART initialization FAILED; enable Core Debug Level=Info for driver errors");
+    return false;
+  }
   Serial.printf("[IMU] UART1 ready: %lu 8N1, RX=GPIO%d, TX=%d; waiting for 7E 23 frames\n",
                 static_cast<unsigned long>(AppConfig::IMU_BAUD),
                 AppConfig::IMU_RX_PIN, AppConfig::IMU_TX_PIN);
@@ -128,6 +136,18 @@ void ImuSensor::poll() {
   for (size_t count = 0; count < 512 && uart_.available(); ++count) {
     const int value = uart_.read();
     if (value >= 0) parser_.feed(static_cast<uint8_t>(value), millis());
+  }
+  // USB pose output is independent of Wi-Fi/TCP. Emit each new sample at <=10 Hz.
+  static uint32_t printedAt = 0, printedCount = 0;
+  const uint32_t now = millis();
+  if (Serial && parser_.quaternionFresh(now, AppConfig::IMU_STALE_MS) &&
+      parser_.quaternionCount != printedCount && uint32_t(now - printedAt) >= 100) {
+    printedAt = now;
+    printedCount = parser_.quaternionCount;
+    const auto &q = parser_.quaternion;
+    Serial.printf("Q(wxyz): %.6f %.6f %.6f %.6f | age=%lums\n",
+                  q.w, q.x, q.y, q.z,
+                  static_cast<unsigned long>(now - parser_.quaternionMs));
   }
   if (!firstSampleReported_ && parser_.hasQuaternion && parser_.hasRpy) {
     firstSampleReported_ = true;
@@ -157,6 +177,10 @@ bool ImuSensor::read(WireProtocol::ImuPayload &sample) {
 }
 
 void ImuSensor::debug() const {
+  Serial.printf("[IMU] driver_started=%d init_ok=%d heap=%lu psram=%lu\n",
+                static_cast<bool>(uart_), available_,
+                static_cast<unsigned long>(ESP.getFreeHeap()),
+                static_cast<unsigned long>(ESP.getPsramSize()));
   Serial.printf("[IMU] bytes=%lu frames=%lu q=%lu rpy=%lu checksum=%lu length=%lu invalid=%lu partial=%lu other=%lu\n",
                 static_cast<unsigned long>(parser_.bytes),
                 static_cast<unsigned long>(parser_.frames),

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IMU · 姿态观测台</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#09121e;color:#e4edf5;font:15px system-ui,"Microsoft Yahei",sans-serif}main{max-width:1180px;margin:auto;padding:36px 24px}header{display:flex;justify-content:space-between;align-items:center;gap:24px}h1{font-size:30px;margin:5px 0}small,.muted{color:#91a5bd}#status{padding:12px 18px;border-radius:24px;background:#26374a;color:#ffc76a}.layout{display:grid;grid-template-columns:1fr 290px;gap:20px;margin-top:28px}.panel{background:#111f30;border:1px solid #26384c;border-radius:20px;padding:24px}canvas{width:100%;height:430px;display:block}h2{font-size:14px;color:#91a5bd;font-weight:500;margin:0 0 20px}.metric{margin:20px 0}.metric b{display:block;font:36px ui-monospace,monospace;margin-top:6px}button{border:1px solid #425b75;background:#1a3147;color:white;border-radius:10px;padding:10px 16px;cursor:pointer}button:disabled{opacity:.4;cursor:default}#q{font:14px ui-monospace,monospace;line-height:1.9;white-space:pre-wrap}footer{margin-top:20px;line-height:1.8;color:#91a5bd}#detail{overflow-wrap:anywhere}.axis{display:flex;gap:20px}#warn{color:#ffc76a;min-height:24px}@media(max-width:800px){.layout{grid-template-columns:1fr}header{align-items:start;flex-direction:column}canvas{height:330px}}
+</style><main><header><div><small>XIAO ESP32S3 / LIVE TELEMETRY</small><h1>IMU 姿态观测台</h1></div><span id="status">等待数据源</span></header>
+<div class="layout"><section class="panel"><h2>三维姿态 · 机体坐标轴</h2><canvas id="scene"></canvas><div class="axis"><span style="color:#ff7885">X · 红</span><span style="color:#69e2ab">Y · 绿</span><span style="color:#73b8ff">Z · 蓝</span></div><p id="warn">收到有效四元数后显示姿态</p><button id="zero" disabled>以当前姿态为零点</button> <button id="reset">恢复绝对姿态</button></section>
+<aside class="panel"><h2 id="mode">绝对姿态 / ZYX 欧拉角</h2><div class="metric">Roll · 横滚<b id="roll">—</b></div><div class="metric">Pitch · 俯仰<b id="pitch">—</b></div><div class="metric">Yaw · 偏航<b id="yaw">—</b></div><h2>接收四元数 · w x y z</h2><div id="q">—</div></aside></div>
+<footer><div id="detail">正在连接本地转发服务…</div><div>完全本地运行，无 CDN。姿态由四元数计算；置零仅改变显示。超过 700 ms 无新样本标为过期并保留最后姿态。</div><div>显示约定：右手系，四元数表示机体到世界的旋转。模块安装方向及厂商坐标定义需用实际绕轴转动核对。</div></footer></main>
+<script>
+const $=id=>document.getElementById(id), canvas=$('scene'),ctx=canvas.getContext('2d');
+let raw=null, reference=null, fresh=false;
+const mul=(a,b)=>[a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];
+const conj=q=>[q[0],-q[1],-q[2],-q[3]];
+function rotate(q,p){return mul(mul(q,[0,...p]),conj(q)).slice(1)}
+function project(p,w,h){return [w/2+(p[0]*.86-p[1]*.5)*w*.22,h/2+(p[0]*.3+p[1]*.52-p[2]*.8)*w*.22]}
+function draw(){
+ const w=canvas.clientWidth,h=canvas.clientHeight,dpr=devicePixelRatio||1;canvas.width=w*dpr;canvas.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+ const line=(a,b,color,width=1)=>{ctx.beginPath();ctx.moveTo(...project(a,w,h));ctx.lineTo(...project(b,w,h));ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke()};
+ for(let i=-4;i<=4;i++){line([i*.5,-2,-.6],[i*.5,2,-.6],'#24354a');line([-2,i*.5,-.6],[2,i*.5,-.6],'#24354a')}
+ if(!raw)return;
+ const q=reference?mul(conj(reference),raw):raw;
+ const [qw,x,y,z]=q,deg=180/Math.PI;
+ const angles=[Math.atan2(2*(qw*x+y*z),1-2*(x*x+y*y)),Math.asin(Math.max(-1,Math.min(1,2*(qw*y-z*x)))),Math.atan2(2*(qw*z+x*y),1-2*(y*y+z*z))];
+ ['roll','pitch','yaw'].forEach((id,i)=>$(id).textContent=(angles[i]*deg).toFixed(1)+'°');
+ const vertices=[[-1,-.55,-.12],[1,-.55,-.12],[1,.55,-.12],[-1,.55,-.12],[-1,-.55,.12],[1,-.55,.12],[1,.55,.12],[-1,.55,.12]].map(p=>rotate(q,p));
+ const depth=p=>p[0]*.4+p[1]*.7+p[2]*.6;
+ const faces=[[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
+ faces.sort((a,b)=>a.reduce((s,i)=>s+depth(vertices[i]),0)-b.reduce((s,i)=>s+depth(vertices[i]),0));
+ ctx.globalAlpha=fresh?1:.4;
+ for(const face of faces){ctx.beginPath();face.forEach((i,k)=>ctx[k?'lineTo':'moveTo'](...project(vertices[i],w,h)));ctx.closePath();ctx.fillStyle=face.includes(4)&&face.includes(6)?'#276c82':'#183d57';ctx.fill();ctx.strokeStyle='#64c7dd';ctx.stroke()}
+ [[1.7,0,0],[0,1.7,0],[0,0,1.7]].forEach((p,i)=>{const end=rotate(q,p),color=['#ff7885','#69e2ab','#73b8ff'][i];line([0,0,0],end,color,3);ctx.fillStyle=color;ctx.font='bold 17px system-ui';ctx.fillText('XYZ'[i],...project(end,w,h))});ctx.globalAlpha=1;
+}
+$('zero').onclick=()=>{if(fresh&&raw){reference=raw.slice();$('mode').textContent='相对姿态 / ZYX 欧拉角';draw()}};
+$('reset').onclick=()=>{reference=null;$('mode').textContent='绝对姿态 / ZYX 欧拉角';draw()};
+window.addEventListener('resize',draw);
+async function poll(){try{const response=await fetch('/api/state',{signal:AbortSignal.timeout(2000)});if(!response.ok)throw Error('HTTP '+response.status);const s=await response.json();raw=s.q;fresh=s.fresh;$('zero').disabled=!fresh;$('status').textContent=fresh?'● 实时接收':s.connected?'● 已连接 · 等待有效姿态':'● 数据源未连接';$('status').style.color=fresh?'#69e2ab':'#ffc76a';$('warn').textContent=fresh?'':raw?'数据已过期，当前为最后收到的姿态':'尚未收到有效四元数';$('detail').textContent=`数据源 ${s.source} · 已接收 ${s.count} 帧 · 样本年龄 ${s.age===null?'—':(s.age*1000).toFixed(0)+' ms'} ${s.error}`;$('q').textContent=raw?raw.map((v,i)=>'wxyz'[i]+'  '+v.toFixed(6)).join('\n'):'—';}catch(e){fresh=false;$('zero').disabled=true;$('status').textContent='● 本地服务连接中断';$('warn').textContent='显示已冻结，请检查 Python 服务';}draw();setTimeout(poll,50)}poll();
+</script></html>

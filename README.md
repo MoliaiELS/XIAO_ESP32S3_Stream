@@ -56,7 +56,7 @@ constexpr bool ENABLE_SD_AUDIO_RECORDING = false;
 
 1. 安装 **esp32 by Espressif Systems 3.0.x**。
 2. 选择开发板 `XIAO_ESP32S3`。
-3. PSRAM 选择 `OPI PSRAM`，分区应提供至少 3 MB APP 空间。
+3. USB CDC On Boot 选择 **Enabled**；PSRAM 选择 `OPI PSRAM`，分区应提供至少 3 MB APP 空间。
 4. 使用 OV5640 自动对焦时，安装 `OV5640 Auto Focus for ESP32 Camera` 0.1.1。
 5. 打开 `Config.h` 填写 2.4 GHz Wi-Fi：
 
@@ -68,6 +68,17 @@ constexpr char WIFI_PASSWORD[] = "你的 Wi-Fi 密码";
 `Config.h` 会被 Git 跟踪，公开仓库前应移除真实密码及其 Git 历史。
 
 上传后以 `115200` 波特率打开串口监视器。连接成功时会输出设备 IP、RSSI、视频地址和 TCP 地址，之后自动报告连接状态并在断线后重连。
+
+## USB IMU 姿态网页
+
+无需电脑连接开发板热点。上传根目录固件后，关闭串口监视器并运行：
+
+```powershell
+python -m pip install -r requirements-imu.txt
+python imu_web.py --serial COM3
+```
+
+打开 http://127.0.0.1:8765 。接线必须是 **IMU TX → D7/GPIO44**。完整 USB/Wi-Fi 使用说明见 [IMU_USB.md](IMU_USB.md)。
 
 ## 使用
 
